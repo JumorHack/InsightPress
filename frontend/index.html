@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InsightPress · AI 书评生成器</title>
+<link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>InsightPress</h1>
+  <p>上传 PDF，让 8 阶段流水线为你生成结构化书评。</p>
+</header>
+
+<main>
+  <section id="upload-section">
+    <h2>1. 上传 PDF</h2>
+    <input type="file" id="file-input" accept="application/pdf,.pdf">
+    <button id="upload-btn">开始生成</button>
+    <p id="upload-error" class="error"></p>
+  </section>
+
+  <section id="progress-section" hidden>
+    <h2>2. 处理进度</h2>
+    <ol id="stage-list">
+      <li data-stage="1">PDF 解析</li>
+      <li data-stage="2">书种分类</li>
+      <li data-stage="3">智能切分</li>
+      <li data-stage="4">逐块提取</li>
+      <li data-stage="5">合成与去重</li>
+      <li data-stage="6">批判性分析</li>
+      <li data-stage="7">质量门控</li>
+      <li data-stage="8">模板渲染</li>
+    </ol>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <p id="progress-text"></p>
+  </section>
+
+  <section id="review-section" hidden>
+    <h2>3. 书评结果</h2>
+    <a id="download-btn" href="#" download>⬇ 下载 .md 文件</a>
+    <article id="review-content"></article>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

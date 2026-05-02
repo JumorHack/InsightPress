@@ -1,0 +1,57 @@
+:root { --accent: #4a90e2; --ok: #2e8540; --warn: #b58105; --err: #c0392b; }
+
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  max-width: 800px; margin: 2em auto; padding: 0 1em;
+  color: #222; line-height: 1.6;
+}
+header h1 { margin: 0 0 0.2em; }
+header p { margin: 0 0 1.5em; color: #666; }
+
+section {
+  margin: 1.5em 0; padding: 1.2em 1.4em;
+  border: 1px solid #e1e4e8; border-radius: 8px; background: #fafbfc;
+}
+section h2 { margin-top: 0; font-size: 1.1em; color: #444; }
+
+input[type="file"] { margin-right: 0.6em; }
+button {
+  padding: 0.5em 1.1em; font-size: 1em; cursor: pointer;
+  background: var(--accent); color: white; border: 0; border-radius: 4px;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.error { color: var(--err); margin: 0.6em 0 0; min-height: 1.2em; }
+
+#stage-list { list-style: none; padding: 0; margin: 0 0 1em; }
+#stage-list li {
+  padding: 0.5em 0.8em; margin: 0.2em 0; border-radius: 4px;
+  color: #999; font-size: 0.95em;
+  border-left: 3px solid transparent;
+}
+#stage-list li::before { content: "○ "; }
+#stage-list li.running { background: #fff8e1; color: var(--warn); border-left-color: var(--warn); }
+#stage-list li.running::before { content: "▶ "; }
+#stage-list li.done { background: #e8f5e9; color: var(--ok); border-left-color: var(--ok); }
+#stage-list li.done::before { content: "✓ "; }
+#stage-list li.error { background: #ffebee; color: var(--err); border-left-color: var(--err); }
+
+#progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 0.8em 0; }
+#progress-fill { height: 100%; background: var(--accent); width: 0; transition: width 0.3s; }
+#progress-text { font-size: 0.9em; color: #666; margin: 0; }
+
+#download-btn {
+  display: inline-block; margin: 0 0 1em;
+  padding: 0.45em 0.9em; background: var(--accent); color: white;
+  text-decoration: none; border-radius: 4px; font-size: 0.95em;
+}
+
+#review-content { background: white; padding: 1.5em; border: 1px solid #e1e4e8; border-radius: 6px; }
+#review-content h1 { margin-top: 0; }
+#review-content h1, #review-content h2, #review-content h3 { color: #222; }
+#review-content blockquote {
+  border-left: 3px solid var(--accent); margin-left: 0;
+  padding: 0.4em 1em; color: #555; background: #f6f8fa;
+}
+#review-content code { background: #f4f4f4; padding: 0 0.3em; border-radius: 3px; font-size: 0.9em; }
+#review-content hr { border: 0; border-top: 1px solid #ddd; margin: 2em 0; }

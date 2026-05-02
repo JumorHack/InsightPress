@@ -1,0 +1,52 @@
+# {{ parsed.metadata.title }}
+
+{% if parsed.metadata.author %}**作者**：{{ parsed.metadata.author }}　·　{% endif %}**页数**：{{ parsed.metadata.page_count }}　·　**质量评分**：{{ gate.overall_score }}/10　·　**门控结论**：{{ gate.verdict }}
+
+## 核心论点
+
+{{ synthesis.core_thesis }}
+
+## 适合读者
+
+{{ synthesis.target_audience }}
+
+## 核心建议
+
+{% for advice in synthesis.core_advice %}
+### {{ loop.index }}. {{ advice.title }}
+
+{{ advice.detail }}
+
+- **适用场景**：{{ advice.when_applicable }}
+- **不适用**：{{ advice.when_not_applicable }}
+
+{% if advice.evidence_quotes -%}
+**原文证据**：
+
+{% for q in advice.evidence_quotes -%}
+> {{ q.text }}{% if q.chapter %}　——《{{ parsed.metadata.title }}》{{ q.chapter }}{% endif %}
+
+{% endfor %}
+{%- endif %}
+{% set crit = critique_by_title.get(advice.title) -%}
+{% if crit -%}
+**批判（{{ crit.verdict }}）**：{{ crit.reasoning }}
+{% endif %}
+{% endfor %}
+{% if critique.factual_issues -%}
+## 事实层面的问题
+
+{% for issue in critique.factual_issues -%}
+- {{ issue }}
+{% endfor %}
+{%- endif %}
+{% if critique.alternative_books -%}
+## 同主题更值得读的书
+
+{% for book in critique.alternative_books -%}
+- {{ book }}
+{% endfor %}
+{%- endif %}
+---
+
+*本书评由 InsightPress 基于本书内容自动生成。引文均限定在合理使用范围内。*

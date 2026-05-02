@@ -1,0 +1,155 @@
+import asyncio
+import json
+from pathlib import Path
+from typing import Any
+
+from ..config import ARTIFACTS_DIR
+from . import (
+    stage1_input,
+    stage2_classify,
+    stage3_chunk,
+    stage4_extract,
+    stage5_synthesize,
+    stage6_critique,
+    stage7_gate,
+    stage8_render,
+)
+
+
+class JobChannel:
+    """单 job 的事件广播：append-only list + condition 唤醒所有订阅者，支持迟到订阅重放历史。"""
+
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+        self.cond = asyncio.Condition()
+        self.closed = False
+
+    async def emit(self, event: str, data: dict) -> None:
+        async with self.cond:
+            self.events.append(
+                {"event": event, "data": json.dumps(data, ensure_ascii=False)}
+            )
+            self.cond.notify_all()
+
+    async def close(self) -> None:
+        async with self.cond:
+            self.closed = True
+            self.cond.notify_all()
+
+    async def stream(self):
+        i = 0
+        while True:
+            async with self.cond:
+                while i >= len(self.events) and not self.closed:
+                    await self.cond.wait()
+                while i < len(self.events):
+                    yield self.events[i]
+                    i += 1
+                if self.closed:
+                    return
+
+
+JOBS: dict[str, JobChannel] = {}
+
+
+def _percent(stage: int, status: str) -> int:
+    # running 时显示进入该阶段时的百分比；done 时显示该阶段结束的百分比。
+    base = (stage - 1) * 100 // 8 if status == "running" else stage * 100 // 8
+    return base
+
+
+def _save(job_dir: Path, name: str, obj: Any) -> None:
+    if isinstance(obj, list):
+        data = [o.model_dump() for o in obj]
+    else:
+        data = obj.model_dump()
+    (job_dir / name).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+STAGE_NAMES = {
+    1: "PDF 解析",
+    2: "书种分类",
+    3: "智能切分",
+    4: "逐块提取",
+    5: "合成与去重",
+    6: "批判性分析",
+    7: "质量门控",
+    8: "模板渲染",
+}
+
+
+async def run_pipeline(job_id: str) -> None:
+    job_dir = ARTIFACTS_DIR / job_id
+    pdf_path = job_dir / "input.pdf"
+    channel = JOBS[job_id]
+
+    async def announce(stage: int, status: str) -> None:
+        await channel.emit(
+            "progress",
+            {
+                "stage": stage,
+                "stage_name": STAGE_NAMES[stage],
+                "status": status,
+                "percent": _percent(stage, status),
+            },
+        )
+
+    current = 0
+    try:
+        current = 1
+        await announce(1, "running")
+        parsed = await asyncio.to_thread(stage1_input.run, pdf_path)
+        _save(job_dir, "stage1_parsed.json", parsed)
+        await announce(1, "done")
+
+        current = 2
+        await announce(2, "running")
+        classification = await asyncio.to_thread(stage2_classify.run, parsed)
+        _save(job_dir, "stage2_classification.json", classification)
+        await announce(2, "done")
+
+        current = 3
+        await announce(3, "running")
+        chunks = await asyncio.to_thread(stage3_chunk.run, parsed)
+        _save(job_dir, "stage3_chunks.json", chunks)
+        await announce(3, "done")
+
+        current = 4
+        await announce(4, "running")
+        extractions = await asyncio.to_thread(stage4_extract.run, chunks)
+        _save(job_dir, "stage4_extractions.json", extractions)
+        await announce(4, "done")
+
+        current = 5
+        await announce(5, "running")
+        synthesis = await asyncio.to_thread(stage5_synthesize.run, extractions)
+        _save(job_dir, "stage5_synthesis.json", synthesis)
+        await announce(5, "done")
+
+        current = 6
+        await announce(6, "running")
+        critique = await asyncio.to_thread(stage6_critique.run, synthesis, parsed)
+        _save(job_dir, "stage6_critique.json", critique)
+        await announce(6, "done")
+
+        current = 7
+        await announce(7, "running")
+        gate = await asyncio.to_thread(stage7_gate.run, synthesis, critique)
+        _save(job_dir, "stage7_gate.json", gate)
+        await announce(7, "done")
+
+        current = 8
+        await announce(8, "running")
+        markdown = await asyncio.to_thread(
+            stage8_render.run, synthesis, critique, gate, classification, parsed
+        )
+        (job_dir / "review.md").write_text(markdown, encoding="utf-8")
+        await announce(8, "done")
+
+        await channel.emit("complete", {"review_url": f"/api/jobs/{job_id}/review"})
+    except Exception as e:
+        await channel.emit("error", {"stage": current, "message": str(e)})
+    finally:
+        await channel.close()
