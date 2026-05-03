@@ -22,11 +22,15 @@ class ParsedBook(BaseModel):
     raw_text: str
 
 
+Genre = Literal["practical", "narrative", "theory", "reference"]
+
+
 class BookClassification(BaseModel):
-    practical_prob: float = Field(ge=0, le=1)
-    narrative_prob: float = Field(ge=0, le=1)
-    theory_prob: float = Field(ge=0, le=1)
-    reference_prob: float = Field(ge=0, le=1)
+    selected_genre: Genre
+    practical_prob: float = Field(default=0.0, ge=0, le=1)
+    narrative_prob: float = Field(default=0.0, ge=0, le=1)
+    theory_prob: float = Field(default=0.0, ge=0, le=1)
+    reference_prob: float = Field(default=0.0, ge=0, le=1)
 
 
 class Chunk(BaseModel):

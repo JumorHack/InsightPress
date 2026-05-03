@@ -1,6 +1,6 @@
 # {{ parsed.metadata.title }}
 
-{% if parsed.metadata.author %}**作者**：{{ parsed.metadata.author }}　·　{% endif %}**页数**：{{ parsed.metadata.page_count }}　·　**质量评分**：{{ gate.overall_score }}/10　·　**门控结论**：{{ gate.verdict }}
+**书种**：{{ genre_label }}　·　{% if parsed.metadata.author %}**作者**：{{ parsed.metadata.author }}　·　{% endif %}**页数**：{{ parsed.metadata.page_count }}　·　**质量评分**：{{ gate.overall_score }}/10　·　**门控结论**：{{ gate.verdict }}
 
 ## 核心论点
 

@@ -16,8 +16,14 @@
 <main>
   <section id="upload-section">
     <h2>1. 上传 PDF</h2>
-    <input type="file" id="file-input" accept="application/pdf,.pdf">
-    <button id="upload-btn">开始生成</button>
+    <div class="upload-row">
+      <label for="genre-select">书种：</label>
+      <select id="genre-select"></select>
+    </div>
+    <div class="upload-row">
+      <input type="file" id="file-input" accept="application/pdf,.pdf">
+      <button id="upload-btn">开始生成</button>
+    </div>
     <p id="upload-error" class="error"></p>
   </section>
 

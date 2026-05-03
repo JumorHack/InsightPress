@@ -116,7 +116,9 @@ def _extract_chunk(chunk: Chunk, system_prompt: str) -> ChunkExtraction:
             tools=[EXTRACT_TOOL],
             tool_name=EXTRACT_TOOL["name"],
             max_tokens=16000,
-            max_retries=2,
+            # 多给点重试名额：v4-flash 偶有连续 2-3 次空 input 的运气问题；
+            # 单 chunk 失败会让整本书评跑空，所以这里宁可多花几次 token。
+            max_retries=4,
         )
     except Exception as e:
         logger.warning("Stage 4 LLM call failed for %s: %s", chunk.chunk_id, e)

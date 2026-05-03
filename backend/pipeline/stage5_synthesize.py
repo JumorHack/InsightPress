@@ -162,13 +162,28 @@ def _empty_synthesis(reason: str) -> Synthesis:
     )
 
 
-def run(extractions: list[ChunkExtraction], chunks: ChunkSet) -> Synthesis:
+def run(
+    extractions: list[ChunkExtraction],
+    chunks: ChunkSet,
+    prior_feedback: str | None = None,
+) -> Synthesis:
+    """合成核心建议。prior_feedback 用于 gate 重试时灌入上次审稿意见。"""
     _client()  # API key 缺失早失败
 
     user_msg = _build_user_message(extractions, chunks)
     if user_msg is None:
         logger.warning("Stage 5: 无任何有效抽取材料")
         return _empty_synthesis("未抽取到任何有效原则/证据/金句")
+
+    if prior_feedback:
+        # 把审稿人意见追加到 user message。注意保持"审稿人/编辑"的措辞，
+        # 不写"质量门控/AI/judge"，与 stage 7 prompt 的隔离原则一致。
+        user_msg += (
+            "\n\n# 改稿要求\n\n"
+            "你上一稿被审稿人评定为质量未达标。审稿人意见如下，请针对性改进 — "
+            "特别注意被指出的具体维度（具体性 / 证据 / 行动性 / 反空泛）：\n\n"
+            f"{prior_feedback}"
+        )
 
     system_prompt = load_prompt("synthesize")
 

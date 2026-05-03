@@ -1,9 +1,11 @@
 import asyncio
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
-from ..config import ARTIFACTS_DIR
+from ..config import ARTIFACTS_DIR, GATE_MAX_RETRIES
+from ..schemas import Genre
 from . import (
     stage1_input,
     stage2_classify,
@@ -14,6 +16,8 @@ from . import (
     stage7_gate,
     stage8_render,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class JobChannel:
@@ -80,21 +84,21 @@ STAGE_NAMES = {
 }
 
 
-async def run_pipeline(job_id: str) -> None:
+async def run_pipeline(job_id: str, book_type: Genre = "practical") -> None:
     job_dir = ARTIFACTS_DIR / job_id
     pdf_path = job_dir / "input.pdf"
     channel = JOBS[job_id]
 
-    async def announce(stage: int, status: str) -> None:
-        await channel.emit(
-            "progress",
-            {
-                "stage": stage,
-                "stage_name": STAGE_NAMES[stage],
-                "status": status,
-                "percent": _percent(stage, status),
-            },
-        )
+    async def announce(stage: int, status: str, attempt: int = 0) -> None:
+        payload: dict[str, Any] = {
+            "stage": stage,
+            "stage_name": STAGE_NAMES[stage],
+            "status": status,
+            "percent": _percent(stage, status),
+        }
+        if attempt > 0:
+            payload["attempt"] = attempt  # 重试时带上次数，前端可选地展示
+        await channel.emit("progress", payload)
 
     current = 0
     try:
@@ -106,7 +110,9 @@ async def run_pipeline(job_id: str) -> None:
 
         current = 2
         await announce(2, "running")
-        classification = await asyncio.to_thread(stage2_classify.run, parsed)
+        classification = await asyncio.to_thread(
+            stage2_classify.run, parsed, book_type
+        )
         _save(job_dir, "stage2_classification.json", classification)
         await announce(2, "done")
 
@@ -120,8 +126,19 @@ async def run_pipeline(job_id: str) -> None:
         await announce(4, "running")
         extractions = await asyncio.to_thread(stage4_extract.run, chunks)
         _save(job_dir, "stage4_extractions.json", extractions)
+        # 守门：所有 chunk 都返回空 = 后面阶段全是空跑，直接报错
+        total_items = sum(
+            len(e.principles) + len(e.evidence) + len(e.quotes) + len(e.claims)
+            for e in extractions
+        )
+        if total_items == 0:
+            raise RuntimeError(
+                "PDF 中未抽取到任何可用原则/证据/金句。可能是 PDF 内容过短、"
+                "扫描件未文字化、或 LLM 多次返回空。请重试或换一份 PDF。"
+            )
         await announce(4, "done")
 
+        # ====== 合成 → 批判 → 门控 (5/6/7) 一组，gate 不通过则带反馈重跑 ======
         current = 5
         await announce(5, "running")
         synthesis = await asyncio.to_thread(stage5_synthesize.run, extractions, chunks)
@@ -139,6 +156,45 @@ async def run_pipeline(job_id: str) -> None:
         gate = await asyncio.to_thread(stage7_gate.run, synthesis, critique, parsed)
         _save(job_dir, "stage7_gate.json", gate)
         await announce(7, "done")
+
+        for attempt in range(1, GATE_MAX_RETRIES + 1):
+            if gate.verdict == "pass":
+                break
+            logger.info(
+                "Gate verdict=%s overall=%d, retrying stages 5-7 (attempt %d/%d)",
+                gate.verdict, gate.overall_score, attempt, GATE_MAX_RETRIES,
+            )
+
+            current = 5
+            await announce(5, "running", attempt)
+            new_synthesis = await asyncio.to_thread(
+                stage5_synthesize.run, extractions, chunks, gate.notes
+            )
+            _save(job_dir, f"stage5_synthesis_retry{attempt}.json", new_synthesis)
+            await announce(5, "done", attempt)
+
+            current = 6
+            await announce(6, "running", attempt)
+            new_critique = await asyncio.to_thread(
+                stage6_critique.run, new_synthesis, parsed
+            )
+            _save(job_dir, f"stage6_critique_retry{attempt}.json", new_critique)
+            await announce(6, "done", attempt)
+
+            current = 7
+            await announce(7, "running", attempt)
+            new_gate = await asyncio.to_thread(
+                stage7_gate.run, new_synthesis, new_critique, parsed
+            )
+            _save(job_dir, f"stage7_gate_retry{attempt}.json", new_gate)
+            await announce(7, "done", attempt)
+
+            # 取最高分那一次：覆盖 canonical 文件，进 stage 8 用最好的
+            if new_gate.overall_score > gate.overall_score:
+                synthesis, critique, gate = new_synthesis, new_critique, new_gate
+                _save(job_dir, "stage5_synthesis.json", synthesis)
+                _save(job_dir, "stage6_critique.json", critique)
+                _save(job_dir, "stage7_gate.json", gate)
 
         current = 8
         await announce(8, "running")

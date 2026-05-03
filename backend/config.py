@@ -1,5 +1,14 @@
 from pathlib import Path
 
+# 书种 — MVP 只完整支持 practical（致用类）。其余 3 种留位以便未来扩展。
+GENRE_LABELS = {
+    "practical": "致用类",
+    "narrative": "叙事类",
+    "theory": "理论类",
+    "reference": "工具类",
+}
+SUPPORTED_GENRES = {"practical"}  # 当前模板能处理的书种
+
 # 模型选用（当前接 DeepSeek 的 Anthropic 兼容端点；切回官方 Claude 改这里 + .env 的 base URL）
 MAIN_MODEL = "deepseek-v4-pro"
 CHEAP_MODEL = "deepseek-v4-flash"

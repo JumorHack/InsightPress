@@ -1,6 +1,6 @@
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from ..config import TEMPLATES_DIR
+from ..config import GENRE_LABELS, TEMPLATES_DIR
 from ..schemas import (
     BookClassification,
     Critique,
@@ -31,6 +31,8 @@ def run(
 
     critique_by_title = {c.advice_title: c for c in critique.per_advice_critique}
 
+    genre_label = GENRE_LABELS.get(classification.selected_genre, "—")
+
     return template.render(
         parsed=parsed,
         synthesis=synthesis,
@@ -38,4 +40,5 @@ def run(
         gate=gate,
         classification=classification,
         critique_by_title=critique_by_title,
+        genre_label=genre_label,
     )

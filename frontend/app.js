@@ -1,5 +1,25 @@
 const $ = (id) => document.getElementById(id);
 
+async function loadGenres() {
+  try {
+    const r = await fetch('/api/genres');
+    const list = await r.json();
+    const sel = $('genre-select');
+    sel.innerHTML = '';
+    for (const g of list) {
+      const opt = document.createElement('option');
+      opt.value = g.key;
+      opt.textContent = g.supported ? g.label : `${g.label}（暂未支持）`;
+      opt.disabled = !g.supported;
+      if (g.supported && !sel.value) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    $('upload-error').textContent = '无法加载书种列表：' + e.message;
+  }
+}
+loadGenres();
+
 $('upload-btn').addEventListener('click', async () => {
   const file = $('file-input').files[0];
   if (!file) {
@@ -11,6 +31,7 @@ $('upload-btn').addEventListener('click', async () => {
 
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('book_type', $('genre-select').value || 'practical');
 
   let resp;
   try {
@@ -49,7 +70,8 @@ function watchProgress(jobId) {
     if (li) li.className = d.status;
     $('progress-fill').style.width = d.percent + '%';
     const verb = d.status === 'running' ? '运行中' : '完成';
-    $('progress-text').textContent = `阶段 ${d.stage}/8 · ${d.stage_name} · ${verb}`;
+    const retry = d.attempt ? `（质量门控重试 ${d.attempt}/2）` : '';
+    $('progress-text').textContent = `阶段 ${d.stage}/8 · ${d.stage_name} · ${verb}${retry}`;
   });
 
   es.addEventListener('complete', async (e) => {
