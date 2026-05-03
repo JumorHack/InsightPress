@@ -1,7 +1,7 @@
 import logging
 
 from ..config import ENABLE_PROMPT_CACHING, MAIN_MODEL
-from ..llm_client import _client, call, load_prompt
+from ..llm_client import _client, call_tool_use_with_retry, load_prompt
 from ..schemas import (
     ChunkExtraction,
     ChunkSet,
@@ -124,16 +124,6 @@ def _build_system(system_prompt: str):
     return [block]
 
 
-def _extract_tool_input(resp) -> dict:
-    for block in resp.content:
-        if (
-            getattr(block, "type", None) == "tool_use"
-            and getattr(block, "name", None) == SYNTHESIS_TOOL["name"]
-        ):
-            return block.input or {}
-    return {}
-
-
 def _build_synthesis(raw: dict) -> Synthesis:
     advice_list: list[CoreAdvice] = []
     for a in raw.get("core_advice", []):
@@ -183,22 +173,22 @@ def run(extractions: list[ChunkExtraction], chunks: ChunkSet) -> Synthesis:
     system_prompt = load_prompt("synthesize")
 
     try:
-        resp = call(
+        raw, stop_reason = call_tool_use_with_retry(
             model=MAIN_MODEL,
             system=_build_system(system_prompt),
             messages=[{"role": "user", "content": user_msg}],
             tools=[SYNTHESIS_TOOL],
-            tool_choice={"type": "any"},
+            tool_name=SYNTHESIS_TOOL["name"],
             max_tokens=16000,
+            max_retries=2,
         )
     except Exception as e:
         logger.warning("Stage 5 LLM call failed: %s", e)
         return _empty_synthesis(f"LLM 调用失败: {e}")
 
-    if getattr(resp, "stop_reason", None) == "max_tokens":
+    if stop_reason == "max_tokens":
         logger.warning("Stage 5 hit max_tokens — synthesis output may be truncated")
 
-    raw = _extract_tool_input(resp)
     if not raw:
         logger.warning("Stage 5: response had no submit_synthesis tool_use block")
         return _empty_synthesis("LLM 未返回结构化结果")

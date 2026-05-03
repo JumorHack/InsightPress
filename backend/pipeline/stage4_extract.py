@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from ..config import CHEAP_MODEL, ENABLE_PROMPT_CACHING, MAP_PHASE_CONCURRENCY
-from ..llm_client import _client, call, load_prompt
+from ..llm_client import _client, call_tool_use_with_retry, load_prompt
 from ..schemas import (
     Chunk,
     ChunkExtraction,
@@ -93,16 +93,6 @@ def _build_user_message(chunk: Chunk) -> str:
     )
 
 
-def _extract_tool_input(resp) -> dict:
-    for block in resp.content:
-        if (
-            getattr(block, "type", None) == "tool_use"
-            and getattr(block, "name", None) == EXTRACT_TOOL["name"]
-        ):
-            return block.input or {}
-    return {}
-
-
 def _filter_valid(items: list[dict], source: str) -> list[dict]:
     return [it for it in items if validate_span(it.get("source_span", ""), source)]
 
@@ -117,29 +107,30 @@ def _build_system(system_prompt: str):
 def _extract_chunk(chunk: Chunk, system_prompt: str) -> ChunkExtraction:
     user_msg = _build_user_message(chunk)
     try:
-        resp = call(
+        # v4-flash 偶发"调 tool 但传空参数"，retry 自动应对；max_tokens 给足以防被
+        # thinking 占满后 tool_use input 截断（截断也表现为空 input）。
+        raw, stop_reason = call_tool_use_with_retry(
             model=CHEAP_MODEL,
             system=_build_system(system_prompt),
             messages=[{"role": "user", "content": user_msg}],
             tools=[EXTRACT_TOOL],
-            # DeepSeek 的 reasoning 模型（v4-flash/v4-pro）不支持强制具体 tool；
-            # 用 "any" 强制必须调一个 tool（这里只有一个，效果等同）。
-            tool_choice={"type": "any"},
-            # v4-flash 是 reasoning 模型，thinking 占 1-2k tokens；max_tokens 太小会
-            # 导致 tool_use input 被截断，结果是 input={} → 抽取全空。给足余量。
+            tool_name=EXTRACT_TOOL["name"],
             max_tokens=16000,
+            max_retries=2,
         )
     except Exception as e:
         logger.warning("Stage 4 LLM call failed for %s: %s", chunk.chunk_id, e)
         return ChunkExtraction(chunk_id=chunk.chunk_id)
 
-    if getattr(resp, "stop_reason", None) == "max_tokens":
+    if stop_reason == "max_tokens":
         logger.warning(
             "Stage 4 hit max_tokens for %s — output truncated, may be incomplete",
             chunk.chunk_id,
         )
+    if not raw:
+        logger.warning("Stage 4 empty extraction for %s after retries", chunk.chunk_id)
+        return ChunkExtraction(chunk_id=chunk.chunk_id)
 
-    raw = _extract_tool_input(resp)
     src = chunk.text
 
     valid_principles = _filter_valid(raw.get("principles", []), src)

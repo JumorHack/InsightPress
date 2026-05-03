@@ -4,7 +4,7 @@ import logging
 # bug（thinking 块完整、tool_use input={}）。v4-flash 与 deepseek-chat 都正常。
 # 暂用 CHEAP_MODEL；待 DeepSeek 修复或换 v5 后再切回 MAIN_MODEL。
 from ..config import CHEAP_MODEL, ENABLE_PROMPT_CACHING
-from ..llm_client import _client, call, load_prompt
+from ..llm_client import _client, call_tool_use_with_retry, load_prompt
 from ..schemas import AdviceCritique, Critique, ParsedBook, Synthesis
 
 logger = logging.getLogger(__name__)
@@ -84,16 +84,6 @@ def _build_system(system_prompt: str):
     return [block]
 
 
-def _extract_tool_input(resp) -> dict:
-    for block in resp.content:
-        if (
-            getattr(block, "type", None) == "tool_use"
-            and getattr(block, "name", None) == CRITIQUE_TOOL["name"]
-        ):
-            return block.input or {}
-    return {}
-
-
 _VALID_VERDICTS = {"holds", "partial", "disagree"}
 
 
@@ -163,24 +153,24 @@ def run(synthesis: Synthesis, parsed: ParsedBook) -> Critique:
     user_msg = _build_user_message(synthesis, parsed)
 
     try:
-        resp = call(
+        raw, stop_reason = call_tool_use_with_retry(
             model=CHEAP_MODEL,
             system=_build_system(system_prompt),
             messages=[{"role": "user", "content": user_msg}],
             tools=[CRITIQUE_TOOL],
-            tool_choice={"type": "any"},
+            tool_name=CRITIQUE_TOOL["name"],
             max_tokens=16000,
+            max_retries=2,
         )
     except Exception as e:
         logger.warning("Stage 6 LLM call failed: %s", e)
         return _fallback_critique(synthesis, f"LLM 调用失败: {e}")
 
-    if getattr(resp, "stop_reason", None) == "max_tokens":
+    if stop_reason == "max_tokens":
         logger.warning("Stage 6 hit max_tokens — critique output may be truncated")
 
-    raw = _extract_tool_input(resp)
     if not raw:
-        logger.warning("Stage 6: response had no submit_critique tool_use block")
-        return _fallback_critique(synthesis, "LLM 未返回结构化结果")
+        logger.warning("Stage 6: 重试后仍未拿到 submit_critique 结果")
+        return _fallback_critique(synthesis, "LLM 多次未返回结构化结果")
 
     return _build_critique(raw, synthesis)

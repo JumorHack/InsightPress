@@ -136,7 +136,7 @@ async def run_pipeline(job_id: str) -> None:
 
         current = 7
         await announce(7, "running")
-        gate = await asyncio.to_thread(stage7_gate.run, synthesis, critique)
+        gate = await asyncio.to_thread(stage7_gate.run, synthesis, critique, parsed)
         _save(job_dir, "stage7_gate.json", gate)
         await announce(7, "done")
 
