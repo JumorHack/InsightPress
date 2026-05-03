@@ -125,11 +125,19 @@ def _extract_chunk(chunk: Chunk, system_prompt: str) -> ChunkExtraction:
             # DeepSeek 的 reasoning 模型（v4-flash/v4-pro）不支持强制具体 tool；
             # 用 "any" 强制必须调一个 tool（这里只有一个，效果等同）。
             tool_choice={"type": "any"},
-            max_tokens=4096,
+            # v4-flash 是 reasoning 模型，thinking 占 1-2k tokens；max_tokens 太小会
+            # 导致 tool_use input 被截断，结果是 input={} → 抽取全空。给足余量。
+            max_tokens=16000,
         )
     except Exception as e:
         logger.warning("Stage 4 LLM call failed for %s: %s", chunk.chunk_id, e)
         return ChunkExtraction(chunk_id=chunk.chunk_id)
+
+    if getattr(resp, "stop_reason", None) == "max_tokens":
+        logger.warning(
+            "Stage 4 hit max_tokens for %s — output truncated, may be incomplete",
+            chunk.chunk_id,
+        )
 
     raw = _extract_tool_input(resp)
     src = chunk.text

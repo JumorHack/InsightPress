@@ -124,7 +124,7 @@ async def run_pipeline(job_id: str) -> None:
 
         current = 5
         await announce(5, "running")
-        synthesis = await asyncio.to_thread(stage5_synthesize.run, extractions)
+        synthesis = await asyncio.to_thread(stage5_synthesize.run, extractions, chunks)
         _save(job_dir, "stage5_synthesis.json", synthesis)
         await announce(5, "done")
 
