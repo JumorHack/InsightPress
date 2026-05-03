@@ -7,7 +7,17 @@ GENRE_LABELS = {
     "theory": "理论类",
     "reference": "工具类",
 }
-SUPPORTED_GENRES = {"practical"}  # 当前模板能处理的书种
+SUPPORTED_GENRES = {"practical", "narrative"}  # 当前 prompt + 模板支持的书种
+
+# 核心条目在 user_message / template 里的称谓（每书种自有术语）
+GENRE_ITEM_HEADER = {
+    "practical": "核心建议",
+    "narrative": "可借鉴的人生模式",
+}
+GENRE_ITEM_NOUN = {
+    "practical": "建议",
+    "narrative": "模式",
+}
 
 # 模型选用（当前接 DeepSeek 的 Anthropic 兼容端点；切回官方 Claude 改这里 + .env 的 base URL）
 MAIN_MODEL = "deepseek-v4-pro"

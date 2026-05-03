@@ -124,7 +124,7 @@ async def run_pipeline(job_id: str, book_type: Genre = "practical") -> None:
 
         current = 4
         await announce(4, "running")
-        extractions = await asyncio.to_thread(stage4_extract.run, chunks)
+        extractions = await asyncio.to_thread(stage4_extract.run, chunks, book_type)
         _save(job_dir, "stage4_extractions.json", extractions)
         # 守门：所有 chunk 都返回空 = 后面阶段全是空跑，直接报错
         total_items = sum(
@@ -141,19 +141,25 @@ async def run_pipeline(job_id: str, book_type: Genre = "practical") -> None:
         # ====== 合成 → 批判 → 门控 (5/6/7) 一组，gate 不通过则带反馈重跑 ======
         current = 5
         await announce(5, "running")
-        synthesis = await asyncio.to_thread(stage5_synthesize.run, extractions, chunks)
+        synthesis = await asyncio.to_thread(
+            stage5_synthesize.run, extractions, chunks, None, book_type
+        )
         _save(job_dir, "stage5_synthesis.json", synthesis)
         await announce(5, "done")
 
         current = 6
         await announce(6, "running")
-        critique = await asyncio.to_thread(stage6_critique.run, synthesis, parsed)
+        critique = await asyncio.to_thread(
+            stage6_critique.run, synthesis, parsed, book_type
+        )
         _save(job_dir, "stage6_critique.json", critique)
         await announce(6, "done")
 
         current = 7
         await announce(7, "running")
-        gate = await asyncio.to_thread(stage7_gate.run, synthesis, critique, parsed)
+        gate = await asyncio.to_thread(
+            stage7_gate.run, synthesis, critique, parsed, book_type
+        )
         _save(job_dir, "stage7_gate.json", gate)
         await announce(7, "done")
 
@@ -168,7 +174,7 @@ async def run_pipeline(job_id: str, book_type: Genre = "practical") -> None:
             current = 5
             await announce(5, "running", attempt)
             new_synthesis = await asyncio.to_thread(
-                stage5_synthesize.run, extractions, chunks, gate.notes
+                stage5_synthesize.run, extractions, chunks, gate.notes, book_type
             )
             _save(job_dir, f"stage5_synthesis_retry{attempt}.json", new_synthesis)
             await announce(5, "done", attempt)
@@ -176,7 +182,7 @@ async def run_pipeline(job_id: str, book_type: Genre = "practical") -> None:
             current = 6
             await announce(6, "running", attempt)
             new_critique = await asyncio.to_thread(
-                stage6_critique.run, new_synthesis, parsed
+                stage6_critique.run, new_synthesis, parsed, book_type
             )
             _save(job_dir, f"stage6_critique_retry{attempt}.json", new_critique)
             await announce(6, "done", attempt)
@@ -184,7 +190,7 @@ async def run_pipeline(job_id: str, book_type: Genre = "practical") -> None:
             current = 7
             await announce(7, "running", attempt)
             new_gate = await asyncio.to_thread(
-                stage7_gate.run, new_synthesis, new_critique, parsed
+                stage7_gate.run, new_synthesis, new_critique, parsed, book_type
             )
             _save(job_dir, f"stage7_gate_retry{attempt}.json", new_gate)
             await announce(7, "done", attempt)

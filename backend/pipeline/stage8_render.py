@@ -27,7 +27,8 @@ def run(
         lstrip_blocks=True,
         keep_trailing_newline=True,
     )
-    template = env.get_template("practical.md.jinja")
+    # 按用户选定的书种挑模板（practical.md.jinja / narrative.md.jinja）
+    template = env.get_template(f"{classification.selected_genre}.md.jinja")
 
     critique_by_title = {c.advice_title: c for c in critique.per_advice_critique}
 

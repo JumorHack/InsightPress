@@ -9,6 +9,7 @@ from ..schemas import (
     ChunkSet,
     Claim,
     Evidence,
+    Genre,
     Principle,
     Quote,
 )
@@ -162,11 +163,11 @@ def _extract_chunk(chunk: Chunk, system_prompt: str) -> ChunkExtraction:
         return ChunkExtraction(chunk_id=chunk.chunk_id)
 
 
-def run(chunks: ChunkSet) -> list[ChunkExtraction]:
+def run(chunks: ChunkSet, genre: Genre = "practical") -> list[ChunkExtraction]:
     # 失败前置：API key 缺失立即抛错，不要等 N 个并发都失败一遍
     _client()
 
-    system_prompt = load_prompt("extract_practical")
+    system_prompt = load_prompt(f"extract_{genre}")
 
     if not chunks.chunks:
         return []

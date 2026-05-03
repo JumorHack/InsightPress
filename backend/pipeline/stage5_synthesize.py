@@ -6,6 +6,7 @@ from ..schemas import (
     ChunkExtraction,
     ChunkSet,
     CoreAdvice,
+    Genre,
     Quote,
     Synthesis,
 )
@@ -166,8 +167,9 @@ def run(
     extractions: list[ChunkExtraction],
     chunks: ChunkSet,
     prior_feedback: str | None = None,
+    genre: Genre = "practical",
 ) -> Synthesis:
-    """合成核心建议。prior_feedback 用于 gate 重试时灌入上次审稿意见。"""
+    """合成核心建议（or 人生模式 等）。prior_feedback 用于 gate 重试时灌入上次审稿意见。"""
     _client()  # API key 缺失早失败
 
     user_msg = _build_user_message(extractions, chunks)
@@ -185,7 +187,7 @@ def run(
             f"{prior_feedback}"
         )
 
-    system_prompt = load_prompt("synthesize")
+    system_prompt = load_prompt(f"synthesize_{genre}")
 
     try:
         raw, stop_reason = call_tool_use_with_retry(

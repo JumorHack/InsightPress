@@ -10,12 +10,15 @@ from ..config import (
     GATE_MAX_RETRIES,
     GATE_MIN_DIMENSION_SCORE,
     GATE_MIN_OVERALL_SCORE,
+    GENRE_ITEM_HEADER,
+    GENRE_ITEM_NOUN,
 )
 from ..llm_client import _client, call_tool_use_with_retry, load_prompt
 from ..schemas import (
     Critique,
     DimensionScores,
     GateVerdict,
+    Genre,
     ParsedBook,
     Synthesis,
 )
@@ -79,7 +82,12 @@ GATE_TOOL = {
 }
 
 
-def _build_user_message(synthesis: Synthesis, parsed: ParsedBook) -> str:
+def _build_user_message(
+    synthesis: Synthesis, parsed: ParsedBook, genre: Genre
+) -> str:
+    item_header = GENRE_ITEM_HEADER[genre]
+    item_noun = GENRE_ITEM_NOUN[genre]
+
     parts = [f"书名：《{parsed.metadata.title}》"]
     if parsed.metadata.author:
         parts.append(f"作者：{parsed.metadata.author}")
@@ -90,7 +98,7 @@ def _build_user_message(synthesis: Synthesis, parsed: ParsedBook) -> str:
     parts.append("# 适合读者")
     parts.append(synthesis.target_audience)
     parts.append("")
-    parts.append("# 核心建议")
+    parts.append(f"# {item_header}")
     for i, a in enumerate(synthesis.core_advice, 1):
         # 把序号和 title 拆开，避免 LLM 把"1. xxx"当成 advice_title 的一部分
         parts.append(f"\n[第 {i} 条]")
@@ -101,7 +109,7 @@ def _build_user_message(synthesis: Synthesis, parsed: ParsedBook) -> str:
     parts.append("")
     parts.append(
         "请按 4 个维度逐条评分，调用 submit_gate 工具输出完整结果。"
-        "**严禁传空参数**——per_advice_scores 必须为稿件中每条核心建议都给一组分数。"
+        f"**严禁传空参数**——per_advice_scores 必须为稿件中每条{item_noun}都给一组分数。"
     )
     return "\n".join(parts)
 
@@ -195,7 +203,10 @@ def _fallback_verdict(synthesis: Synthesis, reason: str) -> GateVerdict:
 
 
 def run(
-    synthesis: Synthesis, critique: Critique, parsed: ParsedBook
+    synthesis: Synthesis,
+    critique: Critique,
+    parsed: ParsedBook,
+    genre: Genre = "practical",
 ) -> GateVerdict:
     _client()  # API key 缺失早失败
 
@@ -210,8 +221,8 @@ def run(
 
     # 重要：判官 prompt 不暗示"AI 生成"，让 judge 当成人写稿件来评。
     # 不传 critique —— judge 应基于稿件本身评，不要被前面的批判影响。
-    system_prompt = load_prompt("judge")
-    user_msg = _build_user_message(synthesis, parsed)
+    system_prompt = load_prompt(f"judge_{genre}")
+    user_msg = _build_user_message(synthesis, parsed, genre)
 
     try:
         raw, stop_reason = call_tool_use_with_retry(
